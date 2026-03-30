@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Obtiene la media de precios de carburantes por tipo a nivel nacional
-desde la API del Ministerio de Transición Ecológica y guarda los datos
-en un CSV. También genera una gráfica de líneas en PNG.
+Obtiene la media de precios nacionales de gasolinas, diésel y GLP
+desde la API del Ministerio de Transición Ecológica.
+Guarda los datos en CSV y genera una gráfica de líneas en PNG.
 """
 
 import csv
 import os
 import sys
-from datetime import datetime, date
+from datetime import date
 
 import requests
 import pandas as pd
@@ -25,22 +25,16 @@ API_URL = (
 CSV_FILE = "precios_carburantes.csv"
 CHART_FILE = "precios_carburantes.png"
 
-# Mapeo de campo API → nombre legible
 FUEL_FIELDS = {
-    "Precio Gasolina 95 E5": "Gasolina 95 E5",
-    "Precio Gasolina 98 E5": "Gasolina 98 E5",
-    "Precio Gasoleo A": "Gasóleo A",
-    "Precio Gasoleo Premium": "Gasóleo Premium",
-    "Precio Gasoleo B": "Gasóleo B",
+    "Precio Gasolina 95 E5": "Gasolina 95",
+    "Precio Gasolina 98 E5": "Gasolina 98",
+    "Precio Gasoleo A": "Diésel",
+    "Precio Gasoleo Premium": "Diésel Premium",
     "Precio Gases licuados del petróleo": "GLP",
-    "Precio Gas Natural Comprimido": "Gas Natural Comprimido",
-    "Precio Gas Natural Licuado": "Gas Natural Licuado",
-    "Precio Hidrogeno": "Hidrógeno",
 }
 
 
 def parse_price(value: str) -> float | None:
-    """Convierte un precio en string (coma decimal) a float. Devuelve None si está vacío."""
     value = value.strip()
     if not value:
         return None
@@ -48,7 +42,6 @@ def parse_price(value: str) -> float | None:
 
 
 def fetch_averages() -> dict[str, float | None]:
-    """Llama a la API y calcula la media nacional por tipo de carburante."""
     response = requests.get(API_URL, timeout=30)
     response.raise_for_status()
     data = response.json()
@@ -74,47 +67,57 @@ def fetch_averages() -> dict[str, float | None]:
 
 
 def append_to_csv(today: date, averages: dict[str, float | None]) -> None:
-    """Añade una fila con la fecha y los precios medios al CSV."""
-    date_str = today.strftime("%Y-%m-%d")
     labels = list(FUEL_FIELDS.values())
     fieldnames = ["Fecha"] + labels
-
     file_exists = os.path.isfile(CSV_FILE)
 
     with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()
-        row: dict = {"Fecha": date_str}
+        row: dict = {"Fecha": today.strftime("%Y-%m-%d")}
         for label in labels:
             value = averages.get(label)
             row[label] = f"{value:.4f}" if value is not None else ""
         writer.writerow(row)
 
-    print(f"[CSV] Fila añadida para {date_str}")
+    print(f"[CSV] Fila añadida para {today}")
 
 
 def generate_chart() -> None:
-    """Lee el CSV completo y genera una gráfica de líneas en PNG."""
     df = pd.read_csv(CSV_FILE, parse_dates=["Fecha"])
     df = df.sort_values("Fecha")
 
     fuel_columns = [c for c in df.columns if c != "Fecha"]
-
-    # Filtrar columnas que tengan al menos un valor no nulo
     available = [c for c in fuel_columns if df[c].notna().any()]
 
     if not available:
         print("[Chart] No hay datos suficientes para generar la gráfica.")
         return
 
-    fig, ax = plt.subplots(figsize=(14, 7))
+    colors = {
+        "Gasolina 95": "#2196F3",
+        "Gasolina 98": "#9C27B0",
+        "Diésel": "#FF9800",
+        "Diésel Premium": "#F44336",
+        "GLP": "#4CAF50",
+    }
+
+    fig, ax = plt.subplots(figsize=(12, 6))
 
     for col in available:
         series = df[["Fecha", col]].dropna()
         if series.empty:
             continue
-        ax.plot(series["Fecha"], series[col], marker="o", markersize=4, label=col)
+        ax.plot(
+            series["Fecha"],
+            series[col],
+            marker="o",
+            markersize=4,
+            linewidth=2,
+            label=col,
+            color=colors.get(col),
+        )
 
     ax.set_title("Media nacional de precios de carburantes (€/litro)", fontsize=14, pad=15)
     ax.set_xlabel("Fecha")
@@ -123,7 +126,7 @@ def generate_chart() -> None:
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     fig.autofmt_xdate(rotation=45)
-    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.grid(True, linestyle="--", alpha=0.4)
     plt.tight_layout()
     plt.savefig(CHART_FILE, dpi=150, bbox_inches="tight")
     plt.close(fig)
