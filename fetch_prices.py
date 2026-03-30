@@ -10,12 +10,29 @@ import os
 import sys
 from datetime import date
 
+import ssl
 import time
+import urllib3
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from urllib3.util.ssl_ import create_urllib3_context
 import pandas as pd
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+class LegacyTLSAdapter(HTTPAdapter):
+    """Adaptador que relaja las restricciones TLS para servidores del gobierno."""
+
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = create_urllib3_context()
+        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        kwargs["ssl_context"] = ctx
+        super().init_poolmanager(*args, **kwargs)
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -56,9 +73,9 @@ def fetch_averages() -> dict[str, float | None]:
     }
     retry = Retry(total=4, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
     session = requests.Session()
-    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.mount("https://", LegacyTLSAdapter(max_retries=retry))
 
-    response = session.get(API_URL, headers=headers, timeout=30)
+    response = session.get(API_URL, headers=headers, timeout=30, verify=False)
     response.raise_for_status()
     data = response.json()
 
