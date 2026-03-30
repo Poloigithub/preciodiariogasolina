@@ -10,7 +10,11 @@ import os
 import sys
 from datetime import date
 
+import time
+
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
@@ -42,7 +46,19 @@ def parse_price(value: str) -> float | None:
 
 
 def fetch_averages() -> dict[str, float | None]:
-    response = requests.get(API_URL, timeout=30)
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/plain, */*",
+    }
+    retry = Retry(total=4, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
+    session = requests.Session()
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+
+    response = session.get(API_URL, headers=headers, timeout=30)
     response.raise_for_status()
     data = response.json()
 
