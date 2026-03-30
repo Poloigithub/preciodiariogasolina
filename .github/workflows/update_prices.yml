@@ -1,0 +1,41 @@
+name: Actualizar precios carburantes
+
+on:
+  schedule:
+    # Cada día a las 7:00 AM hora de Madrid (UTC+1/+2). Usamos 6:00 UTC como base.
+    - cron: "0 6 * * *"
+  workflow_dispatch:  # Permite ejecutar manualmente desde la UI de GitHub
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-and-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar script de precios
+        run: python fetch_prices.py
+
+      - name: Commit y push de cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add precios_carburantes.csv precios_carburantes.png
+          git diff --cached --quiet && echo "Sin cambios" || \
+            git commit -m "chore: actualizar precios carburantes $(date +'%Y-%m-%d')"
+          git push
