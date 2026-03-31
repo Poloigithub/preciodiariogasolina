@@ -8,7 +8,7 @@ Guarda los datos en CSV y genera una gráfica de líneas en PNG.
 import csv
 import os
 import sys
-from datetime import date
+from datetime import date, datetime
 
 import ssl
 import time
@@ -118,6 +118,13 @@ def append_to_csv(today: date, averages: dict[str, float | None]) -> None:
 
 
 def generate_chart() -> None:
+    try:
+        from zoneinfo import ZoneInfo
+        now_spain = datetime.now(ZoneInfo("Europe/Madrid"))
+    except ImportError:
+        now_spain = datetime.now()
+    run_time_str = now_spain.strftime("%H:%M")
+
     df = pd.read_csv(CSV_FILE, parse_dates=["Fecha"])
     df = df.sort_values("Fecha")
 
@@ -136,7 +143,7 @@ def generate_chart() -> None:
         "GLP": "#4CAF50",
     }
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(13, 6))
 
     for col in available:
         series = df[["Fecha", col]].dropna()
@@ -148,19 +155,44 @@ def generate_chart() -> None:
             marker="o",
             markersize=4,
             linewidth=2,
-            label=col,
             color=colors.get(col),
         )
+        last_x = series["Fecha"].iloc[-1]
+        last_y = series[col].iloc[-1]
+        ax.annotate(
+            f"{col}: {last_y:.4f} €",
+            xy=(last_x, last_y),
+            xytext=(8, 0),
+            textcoords="offset points",
+            va="center",
+            ha="left",
+            color=colors.get(col),
+            fontsize=8.5,
+            fontweight="bold",
+        )
 
-    ax.set_title("Media nacional de precios de carburantes (€/litro)", fontsize=14, pad=15)
+    ax.set_title(
+        f"Media nacional de precios de carburantes (€/litro)\n"
+        f"Último dato tomado a las {run_time_str} hora española",
+        fontsize=13,
+        pad=15,
+    )
     ax.set_xlabel("Fecha")
     ax.set_ylabel("€/litro")
-    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1), borderaxespad=0)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     fig.autofmt_xdate(rotation=45)
     ax.grid(True, linestyle="--", alpha=0.4)
-    plt.tight_layout()
+
+    fig.text(
+        0.5, 0.01,
+        "Fuente: MITECO | Gráfico: @poloi.eurosky.social",
+        ha="center",
+        fontsize=8,
+        color="#888888",
+    )
+
+    plt.tight_layout(rect=[0, 0.04, 1, 1])
     plt.savefig(CHART_FILE, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"[Chart] Gráfica guardada en {CHART_FILE}")
