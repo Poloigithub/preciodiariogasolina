@@ -121,7 +121,7 @@ def generate_chart() -> None:
     try:
         from zoneinfo import ZoneInfo
         now_spain = datetime.now(ZoneInfo("Europe/Madrid"))
-    except ImportError:
+    except (ImportError, KeyError):
         now_spain = datetime.now()
     run_time_str = now_spain.strftime("%H:%M")
 
