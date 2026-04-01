@@ -180,7 +180,7 @@ def generate_chart() -> None:
     ax.set_xlabel("Fecha")
     ax.set_ylabel("€/litro")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax.xaxis.set_major_locator(mdates.DayLocator())
     fig.autofmt_xdate(rotation=45)
     ax.grid(True, linestyle="--", alpha=0.4)
 
