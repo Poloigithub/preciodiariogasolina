@@ -123,6 +123,8 @@ def generate_chart() -> None:
         now_spain = datetime.now(ZoneInfo("Europe/Madrid"))
     except (ImportError, KeyError):
         now_spain = datetime.now()
+
+    run_date_str = now_spain.strftime("%d/%m/%Y")
     run_time_str = now_spain.strftime("%H:%M")
 
     df = pd.read_csv(CSV_FILE, parse_dates=["Fecha"])
@@ -139,12 +141,17 @@ def generate_chart() -> None:
         "Gasolina 95": "#2196F3",
         "Gasolina 98": "#9C27B0",
         "Diésel": "#FF9800",
-        "Diésel Premium": "#F44336",
-        "GLP": "#4CAF50",
+        "Diésel Premium": "#E53935",
+        "GLP": "#43A047",
     }
 
-    fig, ax = plt.subplots(figsize=(13, 6))
+    fig, ax = plt.subplots(figsize=(15, 6))
+    fig.patch.set_facecolor("#FAFAFA")
+    ax.set_facecolor("#FAFAFA")
 
+    date_range_days = (df["Fecha"].max() - df["Fecha"].min()).days
+
+    endpoints = []
     for col in available:
         series = df[["Fecha", col]].dropna()
         if series.empty:
@@ -153,47 +160,106 @@ def generate_chart() -> None:
             series["Fecha"],
             series[col],
             marker="o",
-            markersize=4,
-            linewidth=2,
+            markersize=3,
+            linewidth=1.8,
             color=colors.get(col),
+            alpha=0.95,
         )
-        last_x = series["Fecha"].iloc[-1]
-        last_y = series[col].iloc[-1]
-        ax.annotate(
-            f"{col}: {last_y:.4f} €",
-            xy=(last_x, last_y),
-            xytext=(8, 0),
-            textcoords="offset points",
+        endpoints.append({
+            "col": col,
+            "x": series["Fecha"].iloc[-1],
+            "y": series[col].iloc[-1],
+            "label_y": series[col].iloc[-1],
+            "color": colors.get(col),
+        })
+
+    # Anti-overlap: spread labels that are too close
+    y_vals = [e["y"] for e in endpoints]
+    y_range = max(y_vals) - min(y_vals) if len(y_vals) > 1 else 1.0
+    min_gap = y_range * 0.07
+    endpoints.sort(key=lambda e: e["label_y"])
+    for i in range(1, len(endpoints)):
+        if endpoints[i]["label_y"] - endpoints[i - 1]["label_y"] < min_gap:
+            endpoints[i]["label_y"] = endpoints[i - 1]["label_y"] + min_gap
+
+    import matplotlib.transforms as _transforms
+    blended = _transforms.blended_transform_factory(ax.transAxes, ax.transData)
+
+    for ep in endpoints:
+        needs_arrow = abs(ep["label_y"] - ep["y"]) > min_gap * 0.3
+        ax.text(
+            1.01, ep["label_y"],
+            f"{ep['col']}: {ep['y']:.4f} €",
+            transform=blended,
             va="center",
             ha="left",
-            color=colors.get(col),
+            color=ep["color"],
             fontsize=8.5,
             fontweight="bold",
+            clip_on=False,
         )
+        if needs_arrow:
+            ax.annotate(
+                "",
+                xy=(ep["x"], ep["y"]),
+                xytext=(ep["x"], ep["label_y"]),
+                textcoords="data",
+                annotation_clip=False,
+                arrowprops=dict(arrowstyle="-", color=ep["color"], alpha=0.3, lw=0.7),
+            )
+
+    # X-axis: pick tick interval based on date range
+    if date_range_days <= 14:
+        ax.xaxis.set_major_locator(mdates.DayLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+    elif date_range_days <= 90:
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=0, interval=1))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+    elif date_range_days <= 365:
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=0, interval=2))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b '%y"))
+    else:
+        ax.xaxis.set_major_locator(mdates.MonthLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b '%y"))
+
+    fig.autofmt_xdate(rotation=40, ha="right")
+    ax.tick_params(axis="x", labelsize=8)
+    ax.tick_params(axis="y", labelsize=9)
 
     ax.set_title(
-        f"Media nacional de precios de carburantes (€/litro)\n"
-        f"Último dato tomado a las {run_time_str} hora española",
-        fontsize=13,
-        pad=15,
+        "Media nacional de precios de carburantes (€/litro)",
+        fontsize=14,
+        fontweight="bold",
+        pad=10,
+        color="#212121",
     )
-    ax.set_xlabel("Fecha")
-    ax.set_ylabel("€/litro")
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-    ax.xaxis.set_major_locator(mdates.DayLocator())
-    fig.autofmt_xdate(rotation=45)
-    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.set_xlabel("")
+    ax.set_ylabel("€/litro", fontsize=10, color="#555555")
 
+    ax.grid(True, linestyle="--", alpha=0.35, color="#BBBBBB")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_alpha(0.3)
+    ax.spines["bottom"].set_alpha(0.3)
+
+    fig.text(
+        0.5, 0.97,
+        f"Último dato tomado el {run_date_str} a las {run_time_str} hora española",
+        ha="center",
+        fontsize=9,
+        color="#666666",
+        transform=fig.transFigure,
+    )
     fig.text(
         0.5, 0.01,
         "Fuente: MITECO | Gráfico: @poloi.eurosky.social",
         ha="center",
         fontsize=8,
-        color="#888888",
+        color="#999999",
     )
 
-    plt.tight_layout(rect=[0, 0.04, 1, 1])
-    plt.savefig(CHART_FILE, dpi=150, bbox_inches="tight")
+    plt.tight_layout(rect=[0, 0.04, 0.82, 0.94])
+    plt.savefig(CHART_FILE, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
     plt.close(fig)
     print(f"[Chart] Gráfica guardada en {CHART_FILE}")
 
