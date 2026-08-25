@@ -137,17 +137,23 @@ def generate_chart() -> None:
         print("[Chart] No hay datos suficientes para generar la gráfica.")
         return
 
+    # FT Visual Vocabulary — print palette
+    FT_CREAM   = "#fff1e0"
+    FT_AXIS    = "#dacfc5"
+    FT_TEXT    = "#33302e"
+    FT_SUBTEXT = "#66605a"
+
     colors = {
-        "Gasolina 95": "#2196F3",
-        "Gasolina 98": "#9C27B0",
-        "Diésel": "#FF9800",
-        "Diésel Premium": "#E53935",
-        "GLP": "#43A047",
+        "Gasolina 95":    "#006a93",  # FT blue
+        "Gasolina 98":    "#486ba0",  # FT dark blue
+        "Diésel":         "#ddb831",  # FT gold
+        "Diésel Premium": "#ad1c21",  # FT red
+        "GLP":            "#00857a",  # FT teal
     }
 
     fig, ax = plt.subplots(figsize=(15, 6))
-    fig.patch.set_facecolor("#FAFAFA")
-    ax.set_facecolor("#FAFAFA")
+    fig.patch.set_facecolor(FT_CREAM)
+    ax.set_facecolor(FT_CREAM)
 
     date_range_days = (df["Fecha"].max() - df["Fecha"].min()).days
 
@@ -159,18 +165,22 @@ def generate_chart() -> None:
         ax.plot(
             series["Fecha"],
             series[col],
-            marker="o",
-            markersize=3,
-            linewidth=1.8,
-            color=colors.get(col),
-            alpha=0.95,
+            color=colors.get(col, "#666666"),
+            linewidth=2.0,
+            solid_capstyle="round",
+            solid_joinstyle="round",
+            zorder=2,
         )
+        last_x = series["Fecha"].iloc[-1]
+        last_y = series[col].iloc[-1]
+        ax.scatter([last_x], [last_y],
+                   color=colors.get(col, "#666666"), s=20, zorder=3)
         endpoints.append({
             "col": col,
-            "x": series["Fecha"].iloc[-1],
-            "y": series[col].iloc[-1],
-            "label_y": series[col].iloc[-1],
-            "color": colors.get(col),
+            "x": last_x,
+            "y": last_y,
+            "label_y": last_y,
+            "color": colors.get(col, "#666666"),
         })
 
     # Anti-overlap: spread labels that are too close
@@ -186,10 +196,10 @@ def generate_chart() -> None:
     blended = _transforms.blended_transform_factory(ax.transAxes, ax.transData)
 
     for ep in endpoints:
-        needs_arrow = abs(ep["label_y"] - ep["y"]) > min_gap * 0.3
+        needs_connector = abs(ep["label_y"] - ep["y"]) > min_gap * 0.3
         ax.text(
-            1.01, ep["label_y"],
-            f"{ep['col']}: {ep['y']:.4f} €",
+            1.015, ep["label_y"],
+            f"{ep['col']}  {ep['y']:.4f} €",
             transform=blended,
             va="center",
             ha="left",
@@ -198,17 +208,17 @@ def generate_chart() -> None:
             fontweight="bold",
             clip_on=False,
         )
-        if needs_arrow:
+        if needs_connector:
             ax.annotate(
                 "",
                 xy=(ep["x"], ep["y"]),
                 xytext=(ep["x"], ep["label_y"]),
                 textcoords="data",
                 annotation_clip=False,
-                arrowprops=dict(arrowstyle="-", color=ep["color"], alpha=0.3, lw=0.7),
+                arrowprops=dict(arrowstyle="-", color=ep["color"], alpha=0.25, lw=0.6),
             )
 
-    # X-axis: pick tick interval based on date range
+    # X-axis tick interval based on date range
     if date_range_days <= 14:
         ax.xaxis.set_major_locator(mdates.DayLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
@@ -222,43 +232,58 @@ def generate_chart() -> None:
         ax.xaxis.set_major_locator(mdates.MonthLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b '%y"))
 
-    fig.autofmt_xdate(rotation=40, ha="right")
-    ax.tick_params(axis="x", labelsize=8)
-    ax.tick_params(axis="y", labelsize=9)
+    fig.autofmt_xdate(rotation=0, ha="center")
+    ax.tick_params(axis="x", length=0, labelsize=8, colors=FT_SUBTEXT, pad=6)
+    ax.tick_params(axis="y", length=0, labelsize=8, colors=FT_SUBTEXT)
 
-    ax.set_title(
-        "Media nacional de precios de carburantes (€/litro)",
-        fontsize=14,
-        fontweight="bold",
-        pad=10,
-        color="#212121",
-    )
+    # FT signature: y-axis labels on the RIGHT
+    ax.yaxis.set_label_position("right")
+    ax.yaxis.tick_right()
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.2f} €"))
+
+    # Spines: only thin bottom baseline (FT style — no box)
+    for spine in ["top", "right", "left"]:
+        ax.spines[spine].set_visible(False)
+    ax.spines["bottom"].set_linewidth(0.5)
+    ax.spines["bottom"].set_color(FT_AXIS)
+
+    # Subtle dotted horizontal gridlines (FT style)
+    ax.yaxis.grid(True, linestyle=(0, (1, 2)), linewidth=0.5, color=FT_AXIS, zorder=0)
+    ax.xaxis.grid(False)
+    ax.set_axisbelow(True)
+
     ax.set_xlabel("")
-    ax.set_ylabel("€/litro", fontsize=10, color="#555555")
+    ax.set_ylabel("")
 
-    ax.grid(True, linestyle="--", alpha=0.35, color="#BBBBBB")
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_alpha(0.3)
-    ax.spines["bottom"].set_alpha(0.3)
-
+    # Title block — left-aligned, FT style
     fig.text(
-        0.5, 0.97,
-        f"Último dato tomado el {run_date_str} a las {run_time_str} hora española",
-        ha="center",
-        fontsize=9,
-        color="#666666",
+        0.01, 0.97,
+        "Media nacional de precios de carburantes",
+        ha="left", va="top",
+        fontsize=13, fontweight="bold",
+        color=FT_TEXT,
         transform=fig.transFigure,
     )
     fig.text(
-        0.5, 0.01,
-        "Fuente: MITECO | Gráfico: @poloi.eurosky.social",
-        ha="center",
-        fontsize=8,
-        color="#999999",
+        0.01, 0.91,
+        f"€/litro  ·  Último dato: {run_date_str} a las {run_time_str} hora española",
+        ha="left", va="top",
+        fontsize=9,
+        color=FT_SUBTEXT,
+        transform=fig.transFigure,
     )
 
-    plt.tight_layout(rect=[0, 0.04, 0.82, 0.94])
+    # Footer — left-aligned, small
+    fig.text(
+        0.01, 0.02,
+        "Fuente: MITECO | Gráfico: @poloi.eurosky.social",
+        ha="left", va="bottom",
+        fontsize=7.5,
+        color=FT_SUBTEXT,
+        transform=fig.transFigure,
+    )
+
+    plt.tight_layout(rect=[0, 0.06, 0.80, 0.88])
     plt.savefig(CHART_FILE, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
     plt.close(fig)
     print(f"[Chart] Gráfica guardada en {CHART_FILE}")
